@@ -9,7 +9,8 @@ Monas is the small sibling of [Peras](https://github.com/FirePlank/Peras) and
 ## Quick Start
 
 1. Connect the micro:bit v2 to a computer. It shows up as a drive called `MICROBIT`.
-2. Copy [`dist/monas-microbit-v2.hex`](dist/monas-microbit-v2.hex) onto it.
+2. Download `monas-microbit-v2.hex` from the [latest release](https://github.com/FirePlank/Monas/releases/latest)
+   and copy it onto the `MICROBIT` drive.
 3. The micro:bit restarts. The centre LED lights up when Monas is ready.
 
 ## Playing on the micro:bit
@@ -42,8 +43,8 @@ A micro:bit has 128 KB of RAM and a 64 MHz Cortex-M4, and reading flash costs ex
 cycles whenever the 2 KB instruction cache misses. Monas is built around that:
 
 - **No runtime.** It runs directly on the hardware instead of on MakeCode and CODAL,
-  and searches about 11,000 positions per second.
-- **Hot code runs from RAM.** The search, move generation and evaluation (34 KB) are
+  and searches about 9,500 positions per second.
+- **Hot code runs from RAM.** The search, move generation and evaluation (37 KB) are
   copied into RAM at boot and run through the chip's code-RAM address range, which has
   no wait states. From flash they would keep missing the cache.
 - **Small attack tables.** Desktop engines look up sliding attacks in tables of hundreds
