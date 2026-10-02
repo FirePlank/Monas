@@ -6,20 +6,7 @@
 //!   bitsim <image> --ui <script>          drive the OLED + joystick:bit UI from a script
 use bitsim::machine::F_CPU;
 use bitsim::Sim;
-use std::io::{BufRead, Write};
 use std::time::Instant;
-
-fn wait_key(cmd: &str) -> Option<&'static str> {
-    match cmd.split_whitespace().next().unwrap_or("") {
-        "uci" => Some("uciok"),
-        "isready" => Some("readyok"),
-        "go" => Some("bestmove"),
-        "perft" => Some("perft"),
-        "bench" => Some("bench"),
-        "memstat" => Some("info string ram"),
-        _ => None,
-    }
-}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -40,28 +27,7 @@ fn main() {
         return;
     }
     if args.iter().any(|a| a == "--uci") {
-        let stdin = std::io::stdin();
-        let mut out = std::io::stdout();
-        for line in stdin.lock().lines() {
-            let Ok(line) = line else { break };
-            if line.trim() == "quit" {
-                break;
-            }
-            sim.send_line(&line);
-            let key = wait_key(&line);
-            let r = sim.run_until(
-                |l| {
-                    let _ = writeln!(out, "{}", l);
-                    let _ = out.flush();
-                    key.is_some_and(|k| l.starts_with(k))
-                },
-                if key.is_some() { 3600 * F_CPU } else { F_CPU / 10 },
-            );
-            if let Err(e) = r {
-                eprintln!("device fault: {e}");
-                break;
-            }
-        }
+        bitsim::uci_loop(&mut sim);
         return;
     }
     if args.iter().any(|a| a == "--profile") {
@@ -83,7 +49,7 @@ fn main() {
     for cmd in args[2..].iter().filter(|a| !a.starts_with("--")) {
         println!(">> {}", cmd);
         sim.send_line(cmd);
-        let key = wait_key(cmd);
+        let key = bitsim::wait_key(cmd);
         let r = sim.run_until(
             |l| {
                 println!("{}", l);

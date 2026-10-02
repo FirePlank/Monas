@@ -111,3 +111,44 @@ impl Sim {
         }
     }
 }
+
+/// The reply line that ends each serial command, if the command has one.
+pub fn wait_key(cmd: &str) -> Option<&'static str> {
+    match cmd.split_whitespace().next().unwrap_or("") {
+        "uci" => Some("uciok"),
+        "isready" => Some("readyok"),
+        "go" => Some("bestmove"),
+        "perft" => Some("perft"),
+        "bench" => Some("bench"),
+        "memstat" => Some("info string ram"),
+        _ => None,
+    }
+}
+
+/// Acts as a UCI engine on stdin and stdout: each line goes to the device over serial,
+/// and its output is passed through until the command's reply.
+pub fn uci_loop(sim: &mut Sim) {
+    use std::io::{BufRead, Write};
+    let stdin = std::io::stdin();
+    let mut out = std::io::stdout();
+    for line in stdin.lock().lines() {
+        let Ok(line) = line else { break };
+        if line.trim() == "quit" {
+            break;
+        }
+        sim.send_line(&line);
+        let key = wait_key(&line);
+        let r = sim.run_until(
+            |l| {
+                let _ = writeln!(out, "{}", l);
+                let _ = out.flush();
+                key.is_some_and(|k| l.starts_with(k))
+            },
+            if key.is_some() { 3600 * machine::F_CPU } else { machine::F_CPU / 10 },
+        );
+        if let Err(e) = r {
+            eprintln!("device fault: {e}");
+            break;
+        }
+    }
+}
