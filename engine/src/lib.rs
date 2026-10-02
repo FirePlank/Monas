@@ -3,6 +3,7 @@
 
 pub mod attacks;
 pub mod eval;
+pub mod mopup;
 pub mod movegen;
 pub mod picker;
 pub mod position;

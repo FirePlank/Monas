@@ -73,3 +73,7 @@ rust-objcopy -O ihex target/thumbv7em-none-eabihf/release/monas-microbit ../dist
 
 The OLED font is from Kitronik's [:VIEW 128x64 extension](https://github.com/KitronikLtd/pxt-kitronik-128x64Display)
 (MIT License, Copyright (c) 2021 Kitronik Ltd).
+
+## License
+
+Monas is released under the [GNU General Public License v3.0](LICENSE).

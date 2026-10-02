@@ -1,8 +1,10 @@
 //! Hand-crafted evaluation: incrementally kept material + PeSTO tables, plus mobility,
 //! pawn structure, king shelter and attacker pressure, rook files, outposts and the
-//! bishop pair. Port of Peras' HCE onto packed scores.
+//! bishop pair. Port of Peras' HCE onto packed scores. KX vs K positions use the
+//! mop-up evaluation instead.
 
 use crate::attacks::*;
+use crate::mopup::kx_vs_k;
 use crate::position::Position;
 use crate::psqt::{eg, mg, s, Score, MAX_PHASE};
 use crate::types::*;
@@ -159,6 +161,9 @@ fn pawn_structure(pos: &Position) -> PawnEntry {
 
 /// Static evaluation from the side to move's point of view (no pawn cache).
 pub fn evaluate(pos: &Position) -> Value {
+    if let Some(v) = kx_vs_k(pos) {
+        return v;
+    }
     let pe = pawn_structure(pos);
     evaluate_inner(pos, &pe)
 }
@@ -166,6 +171,9 @@ pub fn evaluate(pos: &Position) -> Value {
 /// Static evaluation using the searcher's pawn cache.
 #[cfg_attr(target_os = "none", link_section = ".ramtext")]
 pub fn evaluate_cached(pos: &Position, cache: &mut PawnCache) -> Value {
+    if let Some(v) = kx_vs_k(pos) {
+        return v;
+    }
     let slot = (pos.pawn_key as usize) & (PAWN_CACHE - 1);
     if cache.e[slot].key != pos.pawn_key {
         cache.e[slot] = pawn_structure(pos);

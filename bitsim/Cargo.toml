@@ -2,6 +2,7 @@
 name = "bitsim"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-3.0-only"
 description = "BBC micro:bit v2 (nRF52833 / Cortex-M4F) emulator with a cycle model, for testing micro:bit firmware"
 
 [lib]
