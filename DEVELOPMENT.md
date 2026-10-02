@@ -13,7 +13,7 @@ How Monas is tested without a micro:bit, and how to rebuild the pieces.
 | `tools/`      | Match runner with SPRT, opening book generator, serial UCI bridge |
 | `books/`      | Opening book used for matches                                     |
 | `tests_ui/`   | Scripts that drive the OLED and joystick UI in the emulator       |
-| `dist/`       | Firmware ready to copy onto a micro:bit                           |
+| `dist/`       | Built firmware (see Building in the README; not tracked by git)   |
 
 ## The emulator
 
@@ -39,6 +39,8 @@ cargo build --release -p bitsim
 ./target/release/bitsim dist/monas-microbit-v2.hex uci "position startpos" "go movetime 5000"
 # behave as a UCI engine on stdin and stdout
 ./target/release/bitsim dist/monas-microbit-v2.hex --uci
+# the same for GUIs that take a program without arguments (loads dist/monas-microbit-v2.hex)
+./target/release/monas-uci
 # play through the OLED and joystick UI and print the screen
 ./target/release/bitsim dist/monas-microbit-v2.hex --ui tests_ui/play_e4.txt
 # show which functions the time goes to (needs the ELF for symbols)

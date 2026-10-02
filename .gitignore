@@ -2,3 +2,4 @@ target/
 firmware/target/
 *.log
 *.pgn
+dist/

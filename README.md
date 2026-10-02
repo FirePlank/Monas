@@ -65,6 +65,7 @@ emulator of the micro:bit v2 that counts CPU cycles (see [DEVELOPMENT.md](DEVELO
 rustup target add thumbv7em-none-eabihf
 cd firmware
 cargo build --release
+mkdir -p ../dist
 rust-objcopy -O ihex target/thumbv7em-none-eabihf/release/monas-microbit ../dist/monas-microbit-v2.hex
 ```
 
