@@ -9,27 +9,45 @@ use crate::position::Position;
 use crate::psqt::{eg, mg, s, Score, MAX_PHASE};
 use crate::types::*;
 
+/// A Stockfish Classic score converted to PeSTO units: a pawn is 126/208 there, 82/94 here.
+const fn sf(mg: i32, eg: i32) -> Score {
+    s(mg * 82 / 126, eg * 94 / 208)
+}
+
+// Mobility over Stockfish Classic's mobility area, with its values.
 #[rustfmt::skip]
 const KNIGHT_MOB: [Score; 9] = [
-    s(-62, -81), s(-36, -46), s(-12, -26), s(0, -8), s(8, 4), s(14, 10), s(18, 14), s(20, 16), s(22, 18),
+    sf(-62, -81), sf(-53, -56), sf(-12, -31), sf(-4, -16), sf(3, 5), sf(13, 11), sf(22, 17), sf(28, 20), sf(33, 25),
 ];
 #[rustfmt::skip]
 const BISHOP_MOB: [Score; 14] = [
-    s(-48, -59), s(-20, -23), s(6, -3), s(14, 8), s(20, 16), s(26, 22), s(30, 28),
-    s(32, 30), s(32, 34), s(34, 36), s(36, 38), s(36, 40), s(38, 42), s(40, 44),
+    sf(-48, -59), sf(-20, -23), sf(16, -3), sf(26, 13), sf(38, 24), sf(51, 42), sf(55, 54),
+    sf(63, 57), sf(63, 65), sf(68, 73), sf(81, 78), sf(81, 86), sf(91, 88), sf(98, 97),
 ];
 #[rustfmt::skip]
 const ROOK_MOB: [Score; 15] = [
-    s(-60, -78), s(-20, -17), s(0, 16), s(2, 28), s(4, 48), s(8, 62), s(14, 66), s(18, 74),
-    s(22, 78), s(22, 80), s(24, 84), s(26, 86), s(28, 88), s(28, 88), s(30, 90),
+    sf(-60, -78), sf(-20, -17), sf(2, 23), sf(3, 39), sf(3, 70), sf(11, 99), sf(22, 103), sf(31, 121),
+    sf(40, 134), sf(40, 139), sf(41, 158), sf(48, 164), sf(57, 168), sf(57, 169), sf(62, 172),
 ];
 #[rustfmt::skip]
 const QUEEN_MOB: [Score; 28] = [
-    s(-30, -48), s(-12, -30), s(-8, -7), s(-8, 14), s(10, 30), s(12, 40), s(12, 44), s(18, 50),
-    s(18, 52), s(26, 58), s(30, 60), s(30, 64), s(30, 72), s(30, 76), s(30, 80), s(30, 82),
-    s(34, 84), s(34, 86), s(36, 90), s(36, 92), s(40, 94), s(42, 96), s(42, 96), s(42, 100),
-    s(44, 102), s(46, 104), s(46, 106), s(48, 112),
+    sf(-30, -48), sf(-12, -30), sf(-8, -7), sf(-9, 19), sf(20, 40), sf(23, 55), sf(23, 59), sf(35, 75),
+    sf(38, 78), sf(53, 96), sf(64, 96), sf(65, 100), sf(65, 121), sf(66, 127), sf(67, 131), sf(67, 133),
+    sf(72, 136), sf(72, 141), sf(77, 147), sf(79, 150), sf(93, 151), sf(108, 168), sf(108, 168), sf(108, 171),
+    sf(110, 182), sf(114, 182), sf(114, 192), sf(116, 219),
 ];
+
+// Threats, from Stockfish Classic, indexed by the attacked piece type.
+const THREAT_BY_MINOR: [Score; 6] = [sf(5, 32), sf(57, 41), sf(77, 56), sf(88, 119), sf(79, 161), 0];
+const THREAT_BY_ROOK: [Score; 6] = [sf(3, 46), sf(37, 68), sf(42, 60), sf(0, 38), sf(58, 41), 0];
+const THREAT_BY_KING: Score = sf(24, 89);
+const HANGING: Score = sf(69, 36);
+const WEAK_QUEEN_PROTECTION: Score = sf(14, 0);
+const RESTRICTED_PIECE: Score = sf(7, 7);
+const THREAT_BY_SAFE_PAWN: Score = sf(173, 94);
+const THREAT_BY_PAWN_PUSH: Score = sf(48, 39);
+const KNIGHT_ON_QUEEN: Score = sf(16, 11);
+const SLIDER_ON_QUEEN: Score = sf(60, 18);
 
 const ISOLATED: Score = s(-8, -16);
 const DOUBLED: Score = s(-8, -16);
@@ -159,6 +177,69 @@ fn pawn_structure(pos: &Position) -> PawnEntry {
     PawnEntry { key: pos.pawn_key, passed, score: score[WHITE].wrapping_sub(score[BLACK]) }
 }
 
+/// Stockfish Classic's threats: pieces attacked by lesser ones or left undefended, safe
+/// pawn attacks and pushes, restricted squares and attacks on the queen.
+#[inline(never)]
+#[cfg_attr(target_os = "none", link_section = ".ramtext")]
+fn threats(
+    pos: &Position,
+    us: usize,
+    att: &[[Bitboard; 6]; 2],
+    all: &[Bitboard; 2],
+    att2: &[Bitboard; 2],
+    area: &[Bitboard; 2],
+) -> Score {
+    let them = us ^ 1;
+    let occ = pos.occ();
+    let mut sc: Score = 0;
+    let non_pawn_enemies = pos.colors[them] & !pos.pieces[PAWN];
+    let strongly_protected = att[them][PAWN] | (att2[them] & !att2[us]);
+    let defended = non_pawn_enemies & strongly_protected;
+    let weak = pos.colors[them] & !strongly_protected & all[us];
+
+    if defended | weak != 0 {
+        let mut b = (defended | weak) & (att[us][KNIGHT] | att[us][BISHOP]);
+        while b != 0 {
+            sc += THREAT_BY_MINOR[ptype(pos.board[pop_lsb(&mut b)])];
+        }
+        let mut b = weak & att[us][ROOK];
+        while b != 0 {
+            sc += THREAT_BY_ROOK[ptype(pos.board[pop_lsb(&mut b)])];
+        }
+        if weak & att[us][KING] != 0 {
+            sc += THREAT_BY_KING;
+        }
+        let b = !all[them] | (non_pawn_enemies & att2[us]);
+        sc += HANGING * popcount(weak & b) as i32;
+        sc += WEAK_QUEEN_PROTECTION * popcount(weak & att[them][QUEEN]) as i32;
+    }
+
+    sc += RESTRICTED_PIECE * popcount(all[them] & !strongly_protected & all[us]) as i32;
+
+    let safe = !all[them] | all[us];
+    let b = pawn_attacks_bb(pos.pc(us, PAWN) & safe, us) & non_pawn_enemies;
+    sc += THREAT_BY_SAFE_PAWN * popcount(b) as i32;
+
+    let rank3 = if us == WHITE { RANK_3 } else { RANK_6 };
+    let mut b = push(pos.pc(us, PAWN), us) & !occ;
+    b |= push(b & rank3, us) & !occ;
+    b &= !att[them][PAWN] & safe;
+    sc += THREAT_BY_PAWN_PUSH * popcount(pawn_attacks_bb(b, us) & non_pawn_enemies) as i32;
+
+    let their_queens = pos.pc(them, QUEEN);
+    if their_queens != 0 && !more_than_one(their_queens) {
+        // Doubled when the queen is the only one on the board.
+        let imbalance = if more_than_one(pos.pieces[QUEEN]) { 1 } else { 2 };
+        let s = lsb(their_queens);
+        let safe = area[us] & !pos.pc(us, PAWN) & !strongly_protected;
+        let b = att[us][KNIGHT] & knight_attacks(s);
+        sc += KNIGHT_ON_QUEEN * (popcount(b & safe) as i32 * imbalance);
+        let b = (att[us][BISHOP] & bishop_attacks(s, occ)) | (att[us][ROOK] & rook_attacks(s, occ));
+        sc += SLIDER_ON_QUEEN * (popcount(b & safe & att2[us]) as i32 * imbalance);
+    }
+    sc
+}
+
 /// Static evaluation from the side to move's point of view (no pawn cache).
 pub fn evaluate(pos: &Position) -> Value {
     if let Some(v) = kx_vs_k(pos) {
@@ -191,9 +272,33 @@ fn evaluate_inner(pos: &Position, pe: &PawnEntry) -> Value {
     let mut score: [Score; 2] = [0, 0];
     let mut danger = [0i32; 2];
 
+    // Attack maps: by colour and piece type, all pieces, and squares attacked twice.
+    let mut att = [[0 as Bitboard; 6]; 2];
+    let mut all = [0 as Bitboard; 2];
+    let mut att2 = [0 as Bitboard; 2];
+    let mut area = [0 as Bitboard; 2];
     for us in 0..2 {
         let them = us ^ 1;
-        let own = pos.colors[us];
+        let p = pawns[us];
+        let double_pawn = if us == WHITE {
+            ((p & !FILE_A) << 7) & ((p & !FILE_H) << 9)
+        } else {
+            ((p & !FILE_A) >> 9) & ((p & !FILE_H) >> 7)
+        };
+        att[us][KING] = king_attacks(kings[us]);
+        att[us][PAWN] = pawn_attacks_bb(p, us);
+        all[us] = att[us][KING] | att[us][PAWN];
+        att2[us] = double_pawn | (att[us][KING] & att[us][PAWN]);
+        // Mobility excludes our blocked or unmoved pawns, our king and queen, and squares
+        // enemy pawns attack.
+        let low_ranks = if us == WHITE { RANK_2 | RANK_3 } else { RANK_7 | RANK_6 };
+        let blocked = p & (push(occ, them) | low_ranks);
+        area[us] = !(blocked | pos.pc(us, KING) | pos.pc(us, QUEEN) | pawn_attacks_bb(pawns[them], them));
+    }
+    let queens = pos.pieces[QUEEN];
+
+    for us in 0..2 {
+        let them = us ^ 1;
         let enemy_king = kings[them];
         let own_files = pawn_files[us];
         let enemy_files = pawn_files[them];
@@ -203,8 +308,11 @@ fn evaluate_inner(pos: &Position, pe: &PawnEntry) -> Value {
         let mut b = pos.pc(us, KNIGHT);
         while b != 0 {
             let sq = pop_lsb(&mut b);
-            let mob = popcount(knight_attacks(sq) & !own) as usize;
-            sc += KNIGHT_MOB[mob];
+            let a = knight_attacks(sq);
+            att2[us] |= all[us] & a;
+            att[us][KNIGHT] |= a;
+            all[us] |= a;
+            sc += KNIGHT_MOB[popcount(a & area[us]) as usize];
             if distance(sq, enemy_king) <= 3 {
                 danger[them] += KING_ATTACK_WEIGHT[KNIGHT];
             }
@@ -223,8 +331,12 @@ fn evaluate_inner(pos: &Position, pe: &PawnEntry) -> Value {
         let mut b = bishops;
         while b != 0 {
             let sq = pop_lsb(&mut b);
-            let mob = popcount(bishop_attacks(sq, occ) & !own).min(13) as usize;
-            sc += BISHOP_MOB[mob];
+            // X-rays through queens.
+            let a = bishop_attacks(sq, occ ^ queens);
+            att2[us] |= all[us] & a;
+            att[us][BISHOP] |= a;
+            all[us] |= a;
+            sc += BISHOP_MOB[popcount(a & area[us]) as usize];
             if distance(sq, enemy_king) <= 4 {
                 danger[them] += KING_ATTACK_WEIGHT[BISHOP];
             }
@@ -239,11 +351,16 @@ fn evaluate_inner(pos: &Position, pe: &PawnEntry) -> Value {
             sc += BISHOP_PAIR;
         }
 
-        let mut b = pos.pc(us, ROOK);
+        let rooks = pos.pc(us, ROOK);
+        let mut b = rooks;
         while b != 0 {
             let sq = pop_lsb(&mut b);
-            let mob = popcount(rook_attacks(sq, occ) & !own).min(14) as usize;
-            sc += ROOK_MOB[mob];
+            // X-rays through queens and our other rooks.
+            let a = rook_attacks(sq, occ ^ queens ^ rooks);
+            att2[us] |= all[us] & a;
+            att[us][ROOK] |= a;
+            all[us] |= a;
+            sc += ROOK_MOB[popcount(a & area[us]) as usize];
             if distance(sq, enemy_king) <= 4 {
                 danger[them] += KING_ATTACK_WEIGHT[ROOK];
             }
@@ -256,8 +373,11 @@ fn evaluate_inner(pos: &Position, pe: &PawnEntry) -> Value {
         let mut b = pos.pc(us, QUEEN);
         while b != 0 {
             let sq = pop_lsb(&mut b);
-            let mob = popcount(queen_attacks(sq, occ) & !own).min(27) as usize;
-            sc += QUEEN_MOB[mob];
+            let a = queen_attacks(sq, occ);
+            att2[us] |= all[us] & a;
+            att[us][QUEEN] |= a;
+            all[us] |= a;
+            sc += QUEEN_MOB[popcount(a & area[us]) as usize];
             if distance(sq, enemy_king) <= 5 {
                 danger[them] += KING_ATTACK_WEIGHT[QUEEN];
             }
@@ -286,6 +406,10 @@ fn evaluate_inner(pos: &Position, pe: &PawnEntry) -> Value {
         }
         sc += s(shelter, 0);
         score[us] = sc;
+    }
+
+    for (us, sc) in score.iter_mut().enumerate() {
+        *sc += threats(pos, us, &att, &all, &att2, &area);
     }
 
     for us in 0..2 {

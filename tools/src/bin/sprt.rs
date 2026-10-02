@@ -374,9 +374,11 @@ fn main() {
         if let Some((e0, e1)) = sprt {
             let llr = penta.llr(e0, e1);
             line.push_str(&format!("  LLR {:.2} [{:.2}, {:.2}]", llr, lo, hi));
-            if llr >= hi {
+            // Too few pairs make the variance estimate meaningless.
+            let enough = penta.pairs() >= 50;
+            if enough && llr >= hi {
                 verdict = format!("H1 accepted: {} is stronger (elo1={})", cfg.engines[0].name, e1);
-            } else if llr <= lo {
+            } else if enough && llr <= lo {
                 verdict = format!("H0 accepted: {} is not stronger (elo0={})", cfg.engines[0].name, e0);
             }
         }

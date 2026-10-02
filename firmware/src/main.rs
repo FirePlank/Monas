@@ -219,12 +219,13 @@ static mut UCI: MaybeUninit<Uci> = MaybeUninit::uninit();
 
 fn main() -> ! {
     hw::init();
-    // Keep 1 KB between the deepest search frame and the static data.
+    // Keep 2 KB between the deepest search frame and the static data: a node cut off by
+    // the guard still runs the evaluation.
     extern "C" {
         static __bss_end: u32;
     }
     monas::search::STACK_LIMIT
-        .store(core::ptr::addr_of!(__bss_end) as usize + 1024, core::sync::atomic::Ordering::Relaxed);
+        .store(core::ptr::addr_of!(__bss_end) as usize + 2048, core::sync::atomic::Ordering::Relaxed);
     let s: &mut Searcher;
     let uci: &mut Uci;
     unsafe {
