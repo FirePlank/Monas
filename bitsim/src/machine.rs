@@ -157,6 +157,8 @@ pub struct Machine {
     pub resets: u32,
     /// PC samples (one per 256 instructions) when profiling is on.
     pub samples: Option<std::collections::HashMap<u32, u64>>,
+    /// With profiling on: data reads from flash, by the PC that made them.
+    pub flash_reads: Option<std::collections::HashMap<u32, u64>>,
     /// Analog inputs AIN0..AIN7, 10-bit scale (512 = mid supply).
     pub analog: [u16; 8],
     /// GPIO pins held low from outside (pressed buttons), per port.
@@ -317,6 +319,7 @@ impl Machine {
             reset_requested: false,
             resets: 0,
             samples: None,
+            flash_reads: None,
             analog: [512; 8],
             gpio_force_low: [0; 2],
             oled: None,
@@ -419,6 +422,9 @@ impl Machine {
         }
         if addr < FLASH_SIZE {
             self.cycles += W_FLASH_DATA;
+            if let Some(f) = self.flash_reads.as_mut() {
+                *f.entry(self.pc).or_insert(0) += 1;
+            }
             let a = addr as usize;
             let mut v = 0u32;
             for k in 0..size as usize {

@@ -66,6 +66,7 @@ fn main() {
     }
     if args.iter().any(|a| a == "--profile") {
         sim.m.samples = Some(Default::default());
+        sim.m.flash_reads = Some(Default::default());
     }
     let boot = sim.run_until(
         |l| {
@@ -107,6 +108,25 @@ fn main() {
         syms.sort();
         let mut per: std::collections::HashMap<String, u64> = Default::default();
         let total: u64 = samples.values().sum();
+        // Data reads from flash (2 wait states each), by function.
+        if let Some(fr) = sim.m.flash_reads.take() {
+            let mut per: std::collections::HashMap<String, u64> = Default::default();
+            for (pc, n) in &fr {
+                let i = syms.partition_point(|s| s.0 <= *pc);
+                let name = if i > 0 && *pc < syms[i - 1].0 + syms[i - 1].1 {
+                    syms[i - 1].2.clone()
+                } else {
+                    format!("{:#x}", pc)
+                };
+                *per.entry(name).or_default() += n;
+            }
+            let mut v: Vec<_> = per.into_iter().collect();
+            v.sort_by(|a, b| b.1.cmp(&a.1));
+            println!("flash data reads: {}", fr.values().sum::<u64>());
+            for (n, c) in v.iter().take(12) {
+                println!("  {:10}  {}", c, n);
+            }
+        }
         // BITSIM_HOT=<symbol substring>: also list the hottest instructions inside it.
         if let Ok(want) = std::env::var("BITSIM_HOT") {
             let mut hot: Vec<(u32, u64)> = samples
