@@ -1,0 +1,11 @@
+[package]
+name = "monas-host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+monas = { path = "../engine" }
+
+[[bin]]
+name = "monas"
+path = "src/main.rs"

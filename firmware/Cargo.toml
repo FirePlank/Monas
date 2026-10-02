@@ -1,0 +1,25 @@
+[package]
+name = "monas-firmware"
+version = "0.1.0"
+edition = "2021"
+description = "Monas firmware for the BBC micro:bit v2 (nRF52833)"
+
+[dependencies]
+monas = { path = "../engine" }
+
+[[bin]]
+name = "monas-microbit"
+path = "src/main.rs"
+test = false
+bench = false
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = true
+
+[profile.dev]
+opt-level = "s"
+panic = "abort"

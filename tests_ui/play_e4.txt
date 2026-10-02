@@ -1,0 +1,23 @@
+# Boot, choose "Play as White", 3 s think time, play 1.e4 and let the engine answer.
+wait 0.5
+screen
+press C
+wait 0.3
+joy down 900
+screen
+press C
+wait 0.5
+screen
+# cursor starts on e1: go up to e2, pick up, up two more to e4, drop
+joy up
+press C
+joy up
+joy up
+screen
+press D
+wait 4
+screen
+press E
+screen
+wait 3
+screen

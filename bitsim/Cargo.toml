@@ -1,0 +1,12 @@
+[package]
+name = "bitsim"
+version = "0.1.0"
+edition = "2021"
+description = "BBC micro:bit v2 (nRF52833 / Cortex-M4F) emulator with a cycle model, for testing micro:bit firmware"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "bitsim"
+path = "src/bin/bitsim.rs"

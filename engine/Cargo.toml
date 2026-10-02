@@ -1,0 +1,11 @@
+[package]
+name = "monas"
+version = "0.1.0"
+edition = "2021"
+description = "Monas: a no_std chess engine built for the BBC micro:bit v2 (nRF52833, Cortex-M4F @ 64 MHz)"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []

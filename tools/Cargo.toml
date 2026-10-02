@@ -1,0 +1,13 @@
+[package]
+name = "monas-tools"
+version = "0.1.0"
+edition = "2021"
+description = "Match runner / SPRT, opening book and training-data tools for Monas"
+
+[lib]
+name = "monas_tools"
+path = "src/lib.rs"
+
+[dependencies]
+monas = { path = "../engine" }
+bitsim = { path = "../bitsim" }

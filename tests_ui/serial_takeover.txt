@@ -1,0 +1,6 @@
+wait 0.5
+serial uci
+wait 0.5
+serial position startpos moves e2e4
+serial go movetime 1000
+wait 1.5
