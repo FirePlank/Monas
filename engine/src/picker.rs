@@ -6,7 +6,9 @@ use crate::movegen::{generate, SliceSink, GEN_NOISY, GEN_QUIET};
 use crate::position::{Position, SEE_VALUE};
 use crate::types::*;
 
-pub const ARENA_SIZE: usize = 2048;
+/// Move buffer shared by all plies. Depth-15 searches peak near 270 entries, and a node
+/// stops expanding when fewer than 256 remain.
+pub const ARENA_SIZE: usize = 768;
 
 /// Ordering statistics, shared by the whole search.
 pub struct Tables {

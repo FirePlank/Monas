@@ -413,6 +413,8 @@ impl Searcher {
             return if in_check { 0 } else { evaluate_cached(pos, &mut self.pawns) };
         }
 
+        // One child slot for both the null move and the real moves keeps the frame small.
+        let mut child: Position;
         let us = pos.us();
         let alpha_orig = alpha;
         let tte = self.tt.probe(pos.hash);
@@ -489,7 +491,7 @@ impl Searcher {
                 && beta > VALUE_MATED_IN_MAX_PLY
             {
                 let r = 3 + depth / 3 + ((eval - beta) / 200).min(3);
-                let mut child = *pos;
+                child = *pos;
                 child.do_null();
                 self.stack[ply].mv = Move::NULL;
                 self.stack[ply].piece = NO_PIECE;
@@ -565,7 +567,7 @@ impl Searcher {
                 }
             }
 
-            let mut child = *pos;
+            child = *pos;
             child.do_move(m);
             self.stack[ply].mv = m;
             self.stack[ply].piece = pos.board[m.from()];

@@ -91,15 +91,15 @@ pub fn pop_lsb(b: &mut Bitboard) -> usize {
 }
 #[inline(always)]
 pub fn popcount(b: Bitboard) -> u32 {
-    // Two 32-bit SWAR popcounts: the M4 has no POPCNT and the 64-bit expansion
-    // LLVM emits otherwise is longer.
-    pc32(b as u32) + pc32((b >> 32) as u32)
-}
-#[inline(always)]
-fn pc32(mut x: u32) -> u32 {
-    x = x - ((x >> 1) & 0x5555_5555);
-    x = (x & 0x3333_3333) + ((x >> 2) & 0x3333_3333);
-    x = (x + (x >> 4)) & 0x0F0F_0F0F;
+    // SWAR on both 32-bit halves, merged once the counts are per nibble (at most 8 per
+    // nibble after the merge), so the last two steps run once: the M4 has no POPCNT.
+    let (mut lo, mut hi) = (b as u32, (b >> 32) as u32);
+    lo -= (lo >> 1) & 0x5555_5555;
+    hi -= (hi >> 1) & 0x5555_5555;
+    lo = (lo & 0x3333_3333) + ((lo >> 2) & 0x3333_3333);
+    hi = (hi & 0x3333_3333) + ((hi >> 2) & 0x3333_3333);
+    let x = lo + hi;
+    let x = (x & 0x0F0F_0F0F) + ((x >> 4) & 0x0F0F_0F0F);
     x.wrapping_mul(0x0101_0101) >> 24
 }
 #[inline(always)]
