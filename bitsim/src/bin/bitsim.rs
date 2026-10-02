@@ -107,6 +107,21 @@ fn main() {
         syms.sort();
         let mut per: std::collections::HashMap<String, u64> = Default::default();
         let total: u64 = samples.values().sum();
+        // BITSIM_HOT=<symbol substring>: also list the hottest instructions inside it.
+        if let Ok(want) = std::env::var("BITSIM_HOT") {
+            let mut hot: Vec<(u32, u64)> = samples
+                .iter()
+                .filter(|(pc, _)| {
+                    let i = syms.partition_point(|s| s.0 <= **pc);
+                    i > 0 && **pc < syms[i - 1].0 + syms[i - 1].1 && syms[i - 1].2.contains(&want)
+                })
+                .map(|(pc, n)| (*pc, *n))
+                .collect();
+            hot.sort_by(|a, b| b.1.cmp(&a.1));
+            for (pc, n) in hot.iter().take(100_000) {
+                println!("hot {:#010x} {:6.2}%", pc, 100.0 * *n as f64 / total.max(1) as f64);
+            }
+        }
         for (pc, n) in samples {
             let i = syms.partition_point(|s| s.0 <= pc);
             let name =
