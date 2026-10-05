@@ -1,6 +1,6 @@
 //! Iterative-deepening principal variation search with a transposition table,
 //! aspiration windows, null-move pruning, late move reductions, reverse futility,
-//! razoring, futility / late-move / SEE / history pruning and a quiescence search.
+//! razoring, ProbCut, futility / late-move / SEE / history pruning and a quiescence search.
 //! All state lives in one zero-initialisable struct so the firmware can keep it in a
 //! static with no allocator.
 
@@ -56,6 +56,12 @@ pub const LMR_DIV: i32 = 2300;
 pub const HIST_BONUS_MULT: i32 = 300;
 pub const HIST_BONUS_SUB: i32 = 250;
 pub const HIST_BONUS_MAX: i32 = 1536;
+pub const PROBCUT_MARGIN: Value = 235;
+pub const PROBCUT_IMPROVING: Value = 63;
+pub const PROBCUT_MIN_DEPTH: i32 = 5;
+pub const PROBCUT_DEPTH_SUB: i32 = 5;
+pub const PROBCUT_DIVISOR: Value = 315;
+pub const LOW_DEPTH_PROBCUT_MARGIN: Value = 800;
 
 /// ln(i) * 1024
 #[rustfmt::skip]
@@ -455,7 +461,7 @@ impl Searcher {
             }
         }
         self.stack[ply].static_eval = static_eval;
-        let improving = !in_check
+        let mut improving = !in_check
             && ply >= 2
             && (if self.stack[ply - 2].static_eval != VALUE_NONE {
                 static_eval > self.stack[ply - 2].static_eval
@@ -506,9 +512,67 @@ impl Searcher {
             }
         }
 
+        improving = improving || (!in_check && static_eval >= beta);
+
         // Internal iterative reduction
         if depth >= 4 && tt_move.is_none() && (pv_node || cut_node) {
             depth -= 1;
+        }
+
+        // ProbCut: a capture whose reduced search stays well above beta cuts the node.
+        let pc_beta = beta + PROBCUT_MARGIN - if improving { PROBCUT_IMPROVING } else { 0 };
+        if !pv_node
+            && !in_check
+            && depth >= PROBCUT_MIN_DEPTH
+            && !is_decisive(beta)
+            && (tt_value == VALUE_NONE || tt_value >= pc_beta)
+        {
+            let pc_depth = (depth - PROBCUT_DEPTH_SUB - (static_eval - beta) / PROBCUT_DIVISOR).clamp(0, depth);
+            let threshold = pc_beta - static_eval;
+            let pc_pinned = pos.pinned(us);
+            let pc_top = self.arena_top;
+            let mut pc_picker = Picker::new_q(pos, tt_move, pc_top);
+            loop {
+                let m = pc_picker.next(&mut self.t, pos);
+                if m.is_none() {
+                    break;
+                }
+                if !pos.is_legal(m, pc_pinned) || !pos.see_ge(m, threshold) {
+                    continue;
+                }
+                child = *pos;
+                child.do_move(m);
+                self.stack[ply].mv = m;
+                self.stack[ply].piece = pos.board[m.from()];
+                self.keys[self.root_idx + ply + 1] = child.hash;
+                self.arena_top = pc_picker.end;
+                let mut v = -self.qsearch(h, &child, ply + 1, -pc_beta, -pc_beta + 1);
+                if v >= pc_beta && pc_depth > 0 {
+                    v = -self.negamax(h, &child, pc_depth, ply + 1, -pc_beta, -pc_beta + 1, true);
+                }
+                self.arena_top = pc_top;
+                if self.stopped {
+                    return 0;
+                }
+                if v >= pc_beta {
+                    self.tt.store(pos.hash, pc_depth + 1, BOUND_LOWER, false, value_to_tt(v, ply), static_eval, m);
+                    if !is_decisive(v) {
+                        return v - (pc_beta - beta);
+                    }
+                }
+            }
+        }
+
+        // Small ProbCut: a stored lower bound far above beta is trusted at once.
+        if tte.hit
+            && tt_value != VALUE_NONE
+            && tte.bound & BOUND_LOWER != 0
+            && tte.depth >= depth - 4
+            && tt_value >= beta + LOW_DEPTH_PROBCUT_MARGIN
+            && !is_decisive(beta)
+            && !is_decisive(tt_value)
+        {
+            return beta + LOW_DEPTH_PROBCUT_MARGIN;
         }
 
         let ci = pos.check_info();
