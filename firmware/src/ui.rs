@@ -19,6 +19,10 @@ use monas::uci::Uci;
 
 const JOY_LOW: u32 = 300;
 const JOY_HIGH: u32 = 700;
+/// Input polling interval; short enough that a quick button tap is always seen.
+const POLL_MS: u64 = 20;
+/// How long the "Press B again" prompt waits for the second press.
+const QUIT_WINDOW_MS: u64 = 3000;
 const REPEAT_DELAY_MS: u64 = 400;
 const REPEAT_INTERVAL_MS: u64 = 120;
 
@@ -256,7 +260,7 @@ impl<'a> Ui<'a> {
             if ev.c {
                 return Some(sel);
             }
-            if !pause(100) {
+            if !pause(POLL_MS) {
                 return None;
             }
         }
@@ -286,7 +290,7 @@ impl<'a> Ui<'a> {
             if ev.b {
                 return Some(None);
             }
-            if !pause(100) {
+            if !pause(POLL_MS) {
                 return None;
             }
         }
@@ -402,7 +406,7 @@ impl<'a> Ui<'a> {
                     if ev.c || ev.b {
                         return Some(());
                     }
-                    if !pause(100) {
+                    if !pause(POLL_MS) {
                         return None;
                     }
                 }
@@ -467,12 +471,17 @@ impl<'a> Ui<'a> {
         let mut inp = Input::new();
         self.selected = None;
         self.draw_board();
-        let mut quit_armed = false;
+        // Set while the "Press B again" prompt is up: the time it expires.
+        let mut quit_until: Option<u64> = None;
         loop {
             if serial_waiting() {
                 return None;
             }
             let ev = inp.poll();
+            if quit_until.is_some_and(|t| now_ms() >= t) {
+                quit_until = None;
+                self.draw_board();
+            }
             if ev.e {
                 let a = line!("Engine played:");
                 let b = line!("{}", core::str::from_utf8(&self.last_engine.b[..self.last_engine.n]).unwrap_or(""));
@@ -485,19 +494,29 @@ impl<'a> Ui<'a> {
             }
             let mut redraw = false;
             if ev.b {
-                if self.selected.is_some() {
+                if quit_until.is_some() {
+                    return Some(false);
+                } else if self.selected.is_some() {
                     self.selected = None;
                     redraw = true;
-                } else if quit_armed {
-                    return Some(false);
                 } else {
-                    quit_armed = true;
+                    // The prompt stays up while input is still read, so the second
+                    // press counts whenever it comes within the window.
+                    quit_until = Some(now_ms() + QUIT_WINDOW_MS);
                     self.status(&line!("Press B again"), &line!("to quit the game"), &Line::new());
-                    if !pause(1200) {
-                        return None;
-                    }
-                    redraw = true;
+                    continue;
                 }
+            }
+            if quit_until.is_some() {
+                // Anything else dismisses the prompt.
+                if ev.c || ev.d || ev.e || ev.dx != 0 || ev.dy != 0 {
+                    quit_until = None;
+                    self.draw_board();
+                }
+                if !pause(POLL_MS) {
+                    return None;
+                }
+                continue;
             }
             if ev.c {
                 let sq = self.square_at(self.cur_row, self.cur_col);
@@ -535,7 +554,6 @@ impl<'a> Ui<'a> {
             if ev.dx != 0 || ev.dy != 0 {
                 self.cur_col = (self.cur_col + ev.dx).clamp(0, 7);
                 self.cur_row = (self.cur_row + ev.dy).clamp(0, 7);
-                quit_armed = false;
             }
             if redraw {
                 self.draw_board();
@@ -545,7 +563,7 @@ impl<'a> Ui<'a> {
             } else if ev.dx != 0 {
                 self.draw_row(self.cur_row);
             }
-            if !pause(100) {
+            if !pause(POLL_MS) {
                 return None;
             }
         }

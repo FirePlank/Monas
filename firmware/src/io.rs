@@ -104,7 +104,7 @@ fn adc_read(psel: u32) -> u32 {
         write_volatile(buf, 0);
         wr(SAADC + 0x510, psel); // CH[0].PSELP
         wr(SAADC + 0x514, 0); // CH[0].PSELN
-        wr(SAADC + 0x518, (5 << 8) | (1 << 12) | (2 << 16)); // gain 1/4, ref VDD/4, 10 us
+        wr(SAADC + 0x518, (2 << 8) | (1 << 12) | (2 << 16)); // gain 1/4, ref VDD/4, 10 us
         wr(SAADC + 0x5F0, 1); // 10 bit
         wr(SAADC + 0x5F4, 0);
         wr(SAADC + 0x5F8, 0);

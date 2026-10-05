@@ -1,0 +1,18 @@
+# Choose "Play as Black" with a short think time, let the engine move, leave the stick
+# alone (the cursor must not drift), then quit with B twice.
+wait 1.6
+joy down
+press C
+wait 0.3
+joy down 4000
+press C
+wait 6
+screen
+wait 1
+screen
+press B
+wait 0.5
+screen
+press B
+wait 0.5
+screen

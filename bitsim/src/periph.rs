@@ -1065,7 +1065,17 @@ impl Saadc {
             }
             any = true;
             let ain = (psel.clamp(1, 8) - 1) as usize;
-            let v = (((m.analog[ain] as u32) << (8 + 2 * res)) >> 10) as u16;
+            // The input is a fraction of VDD (0..1023). The result scales it by the
+            // channel's gain over its reference and saturates, as the hardware does.
+            let cfg = self.regs.get(0x518 + 16 * c);
+            const GAIN_X12: [u64; 8] = [2, 0, 3, 4, 6, 12, 24, 48]; // gain * 12; 1/5 below
+            let g = ((cfg >> 8) & 7) as usize;
+            let vdd_mv = 3000u64;
+            let ref_mv = if cfg & (1 << 12) != 0 { vdd_mv / 4 } else { 600 };
+            let vin_mv = m.analog[ain] as u64 * vdd_mv / 1023;
+            let full = 1u64 << (8 + 2 * res);
+            let scaled = if g == 1 { vin_mv * full / 5 / ref_mv } else { vin_mv * GAIN_X12[g] * full / 12 / ref_mv };
+            let v = scaled.min(full - 1) as u16;
             m.dma_write(self.ptr + 2 * self.amount, &v.to_le_bytes());
             self.amount += 1;
         }
